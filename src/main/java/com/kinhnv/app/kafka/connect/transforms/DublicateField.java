@@ -1,4 +1,4 @@
-package com.kinhnv.app.kafka.connect;
+package com.kinhnv.app.kafka.connect.transforms;
 
 import java.util.HashMap;
 import java.util.List;
@@ -35,14 +35,12 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
     private Cache<Schema, Schema> schemaUpdateCache;
 
     private Map<String, String> fields;
-    private Map<String, String> reverseFields;
 
     @Override
     public void configure(Map<String, ?> props) {
         final SimpleConfig config = new SimpleConfig(CONFIG_DEF, props);
 
         fields = parseRenameMappings(config.getList(ConfigName.DUPLICATE_FIELDS));
-        reverseFields = invert(fields);
 
         schemaUpdateCache = new SynchronizedCache<>(new LRUCache<Schema, Schema>(16));
     }
@@ -75,11 +73,6 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
         return mapping == null ? fieldName : mapping;
     }
 
-    String reverseField(String fieldName) {
-        final String mapping = reverseFields.get(fieldName);
-        return mapping == null ? null : mapping;
-    }
-
     @Override
     public R apply(R record) {
         if (operatingSchema(record) == null) {
@@ -99,9 +92,11 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             final Object fieldValue = e.getValue();
             updatedValue.put(fieldName, fieldValue);
 
-            final String newfieldName = reverseField(fieldName);
-            if (newfieldName != null) {
-                updatedValue.put(newfieldName, fieldValue);
+            for (Map.Entry<String, String> field : fields.entrySet()) {
+                if (field.getValue() == fieldName) {
+                    final String newfieldName = field.getKey();
+                    updatedValue.put(newfieldName, fieldValue);
+                }
             }
         }
 
@@ -124,9 +119,11 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             final Object fieldValue = value.get(field);
             updatedValue.put(fieldName, fieldValue);
 
-            final String newfieldName = reverseField(fieldName);
-            if (newfieldName != null) {
-                updatedValue.put(newfieldName, fieldValue);
+            for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
+                if (fieldsEntity.getValue().equals(fieldName)) {
+                    final String newfieldName = fieldsEntity.getKey();
+                    updatedValue.put(newfieldName, fieldValue);
+                }
             }
         }
 
@@ -149,9 +146,11 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             if (filter(field.name())) {
                 builder.field(field(field.name()), field.schema());
 
-                final String newfieldName = reverseField(field.name());
-                if (newfieldName != null) {
-                    builder.field(newfieldName, field.schema());
+                for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
+                    if (fieldsEntity.getValue().equals(field.name())) {
+                        final String newfieldName = fieldsEntity.getKey();
+                        builder.field(newfieldName, field.schema());
+                    }
                 }
             }
         }

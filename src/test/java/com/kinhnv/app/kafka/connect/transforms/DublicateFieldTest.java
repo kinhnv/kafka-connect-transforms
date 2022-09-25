@@ -1,4 +1,4 @@
-package com.kinhnv.app.kafka.connect;
+package com.kinhnv.app.kafka.connect.transforms;
 
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
