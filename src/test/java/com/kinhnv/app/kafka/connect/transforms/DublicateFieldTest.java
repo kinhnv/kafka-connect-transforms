@@ -30,7 +30,7 @@ public class DublicateFieldTest {
   }
 
   @Test
-  public void copySchemaAndInsertUuidField() {
+  public void copySchemaAndDuplicateField() {
     final Map<String, Object> props = new HashMap<>();
 
     props.put("duplicate.fields", "magic1:magic");
@@ -61,7 +61,7 @@ public class DublicateFieldTest {
   }
 
   @Test
-  public void schemalessInsertUuidField() {
+  public void schemalessDublicateField() {
     final Map<String, Object> props = new HashMap<>();
 
     props.put("duplicate.fields", "magic1:magic");

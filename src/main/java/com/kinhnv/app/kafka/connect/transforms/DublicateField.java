@@ -93,7 +93,7 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             updatedValue.put(fieldName, fieldValue);
 
             for (Map.Entry<String, String> field : fields.entrySet()) {
-                if (field.getValue() == fieldName) {
+                if (field.getValue().equals(fieldName)) {
                     final String newfieldName = field.getKey();
                     updatedValue.put(newfieldName, fieldValue);
                 }
