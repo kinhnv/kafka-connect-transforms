@@ -4,10 +4,10 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.kinhnv.app.kafka.connect</groupId>
-  <artifactId>duplicate-field</artifactId>
+  <artifactId>kafka-connect-transforms</artifactId>
   <version>1.1</version>
 
-  <name>duplicate-field</name>
+  <name>kafka-connect-transforms</name>
   <!-- FIXME change it to the project's website -->
   <url>http://www.example.com</url>
 

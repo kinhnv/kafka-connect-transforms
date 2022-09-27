@@ -22,12 +22,10 @@ import static org.apache.kafka.connect.transforms.util.Requirements.requireStruc
 
 public abstract class DublicateField<R extends ConnectRecord<R>> implements Transformation<R> {
 
-    private interface ConfigName {
-        String DUPLICATE_FIELDS = "duplicate.fields";
-    }
+    private static final String DUPLICATE_FIELDS = "duplicate.fields";
 
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
-            .define(ConfigName.DUPLICATE_FIELDS, ConfigDef.Type.LIST, "duplicate_field", ConfigDef.Importance.HIGH,
+            .define(DUPLICATE_FIELDS, ConfigDef.Type.LIST, "duplicate_field", ConfigDef.Importance.HIGH,
                     "Field name for duplication");
 
     private static final String PURPOSE = "adding duplicate field to record";
@@ -40,7 +38,7 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
     public void configure(Map<String, ?> props) {
         final SimpleConfig config = new SimpleConfig(CONFIG_DEF, props);
 
-        fields = parseRenameMappings(config.getList(ConfigName.DUPLICATE_FIELDS));
+        fields = parseRenameMappings(config.getList(DUPLICATE_FIELDS));
 
         schemaUpdateCache = new SynchronizedCache<>(new LRUCache<Schema, Schema>(16));
     }
@@ -54,18 +52,6 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             }
         }
         return m;
-    }
-
-    static Map<String, String> invert(Map<String, String> source) {
-        final Map<String, String> m = new HashMap<>();
-        for (Map.Entry<String, String> e : source.entrySet()) {
-            m.put(e.getValue(), e.getKey());
-        }
-        return m;
-    }
-
-    boolean filter(String fieldName) {
-        return true;
     }
 
     String field(String fieldName) {
@@ -143,14 +129,12 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
     private Schema makeUpdatedSchema(Schema schema) {
         final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
         for (Field field : schema.fields()) {
-            if (filter(field.name())) {
-                builder.field(field(field.name()), field.schema());
+            builder.field(field(field.name()), field.schema());
 
-                for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
-                    if (fieldsEntity.getValue().equals(field.name())) {
-                        final String newfieldName = fieldsEntity.getKey();
-                        builder.field(newfieldName, field.schema());
-                    }
+            for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
+                if (fieldsEntity.getValue().equals(field.name())) {
+                    final String newfieldName = fieldsEntity.getKey();
+                    builder.field(newfieldName, field.schema());
                 }
             }
         }
