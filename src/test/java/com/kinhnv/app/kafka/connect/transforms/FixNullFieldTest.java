@@ -4,6 +4,7 @@ import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
 import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.errors.DataException;
+import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.source.SourceRecord;
 import org.junit.After;
 import org.junit.Test;
@@ -14,26 +15,20 @@ import java.util.Map;
 
 import static org.junit.Assert.*;
 
-public class DublicateFieldTest {
+public class FixNullFieldTest {
 
-  private DublicateField<SourceRecord> xform = new DublicateField.Value<>();
+  private FixNullField<SourceRecord> xform = new FixNullField.Value<>();
 
   @After
   public void tearDown() throws Exception {
     xform.close();
   }
 
-  @Test(expected = DataException.class)
-  public void topLevelStructRequired() {
-    xform.configure(Collections.singletonMap("fields", "duplicate_field"));
-    xform.apply(new SourceRecord(null, null, "", 0, Schema.INT32_SCHEMA, 42));
-  }
-
   @Test
   public void copySchemaAndDuplicateField() {
     final Map<String, Object> props = new HashMap<>();
-
-    props.put("fields", "magic1:magic");
+    props.put("field", "magic");
+    props.put("value", "{}");
 
     xform.configure(props);
 
@@ -63,16 +58,15 @@ public class DublicateFieldTest {
   @Test
   public void schemalessDublicateField() {
     final Map<String, Object> props = new HashMap<>();
-
-    props.put("fields", "magic1:magic");
+    props.put("field", "magic");
+    props.put("value", "{}");
 
     xform.configure(props);
 
     final SourceRecord record = new SourceRecord(null, null, "test", 0,
-        null, Collections.singletonMap("magic", 42L));
+        null, Collections.singletonMap("magic", null));
 
     final SourceRecord transformedRecord = xform.apply(record);
-    assertEquals(42L, ((Map) transformedRecord.value()).get("magic"));
-    assertEquals(42L, ((Map) transformedRecord.value()).get("magic1"));
+    assertNotNull(((Map) transformedRecord.value()).get("magic"));
   }
 }

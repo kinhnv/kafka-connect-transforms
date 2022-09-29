@@ -9,6 +9,7 @@ import org.apache.kafka.common.cache.LRUCache;
 import org.apache.kafka.common.cache.SynchronizedCache;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.connect.connector.ConnectRecord;
+import org.apache.kafka.connect.data.Decimal;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
 import org.apache.kafka.connect.data.SchemaBuilder;
@@ -17,46 +18,38 @@ import org.apache.kafka.connect.transforms.Transformation;
 import org.apache.kafka.connect.transforms.util.SchemaUtil;
 import org.apache.kafka.connect.transforms.util.SimpleConfig;
 
+import com.google.gson.Gson;
+
 import static org.apache.kafka.connect.transforms.util.Requirements.requireMap;
 import static org.apache.kafka.connect.transforms.util.Requirements.requireStruct;
 
-public abstract class DublicateField<R extends ConnectRecord<R>> implements Transformation<R> {
+public abstract class FixNullField<R extends ConnectRecord<R>> implements Transformation<R> {
 
-    private static final String DUPLICATE_FIELDS = "fields";
+    private static final String FIELD = "field";
+    private static final String VALUE = "value";
 
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
-            .define(DUPLICATE_FIELDS, ConfigDef.Type.LIST, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH,
-                    "Field name for duplication");
+            .define(FIELD, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH,
+                    "Field name can be null")
+            .define(VALUE, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.HIGH,
+                    "value for replace null value");
 
-    private static final String PURPOSE = "adding duplicate field to record";
+    private static final String PURPOSE = "Fix null field";
 
     private Cache<Schema, Schema> schemaUpdateCache;
 
-    private Map<String, String> fields;
+    private String fieldName;
+
+    private String fieldValue;
 
     @Override
     public void configure(Map<String, ?> props) {
         final SimpleConfig config = new SimpleConfig(CONFIG_DEF, props);
 
-        fields = parseRenameMappings(config.getList(DUPLICATE_FIELDS));
+        fieldName = config.getString(FIELD);
+        fieldValue = config.getString(VALUE);
 
         schemaUpdateCache = new SynchronizedCache<>(new LRUCache<Schema, Schema>(16));
-    }
-
-    static Map<String, String> parseRenameMappings(List<String> mappings) {
-        final Map<String, String> m = new HashMap<>();
-        for (String mapping : mappings) {
-            final String[] parts = mapping.split(":");
-            if (parts.length == 2) {
-                m.put(parts[0], parts[1]);
-            }
-        }
-        return m;
-    }
-
-    String field(String fieldName) {
-        final String mapping = fields.get(fieldName);
-        return mapping == null ? fieldName : mapping;
     }
 
     @Override
@@ -74,15 +67,17 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
         final Map<String, Object> updatedValue = new HashMap<>(value.size());
 
         for (Map.Entry<String, Object> e : value.entrySet()) {
-            final String fieldName = e.getKey();
-            final Object fieldValue = e.getValue();
-            updatedValue.put(fieldName, fieldValue);
-
-            for (Map.Entry<String, String> field : fields.entrySet()) {
-                if (field.getValue().equals(fieldName)) {
-                    final String newfieldName = field.getKey();
-                    updatedValue.put(newfieldName, fieldValue);
+            if (e.getKey().equals(fieldName) && e.getValue() == null) {
+                if (e.getValue() instanceof Integer) {
+                    updatedValue.put(e.getKey(), Integer.parseInt(fieldValue));
+                } else if (e.getValue() instanceof String) {
+                    updatedValue.put(e.getKey(), fieldValue);
+                } else {
+                    Gson g = new Gson();
+                    updatedValue.put(e.getKey(), g.fromJson(fieldValue, Object.class));
                 }
+            } else {
+                updatedValue.put(e.getKey(), e.getValue());
             }
         }
 
@@ -104,13 +99,6 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
             final String fieldName = field.name();
             final Object fieldValue = value.get(field);
             updatedValue.put(fieldName, fieldValue);
-
-            for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
-                if (fieldsEntity.getValue().equals(fieldName)) {
-                    final String newfieldName = fieldsEntity.getKey();
-                    updatedValue.put(newfieldName, fieldValue);
-                }
-            }
         }
 
         return newRecord(record, updatedSchema, updatedValue);
@@ -129,14 +117,7 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
     private Schema makeUpdatedSchema(Schema schema) {
         final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
         for (Field field : schema.fields()) {
-            builder.field(field(field.name()), field.schema());
-
-            for (Map.Entry<String, String> fieldsEntity : fields.entrySet()) {
-                if (fieldsEntity.getValue().equals(field.name())) {
-                    final String newfieldName = fieldsEntity.getKey();
-                    builder.field(newfieldName, field.schema());
-                }
-            }
+            builder.field(field.name(), field.schema());
         }
 
         return builder.build();
@@ -148,7 +129,7 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
 
     protected abstract R newRecord(R record, Schema updatedSchema, Object updatedValue);
 
-    public static class Key<R extends ConnectRecord<R>> extends DublicateField<R> {
+    public static class Key<R extends ConnectRecord<R>> extends FixNullField<R> {
 
         @Override
         protected Schema operatingSchema(R record) {
@@ -168,7 +149,7 @@ public abstract class DublicateField<R extends ConnectRecord<R>> implements Tran
 
     }
 
-    public static class Value<R extends ConnectRecord<R>> extends DublicateField<R> {
+    public static class Value<R extends ConnectRecord<R>> extends FixNullField<R> {
 
         @Override
         protected Schema operatingSchema(R record) {

@@ -31,7 +31,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class WrapFieldTest {
-    private final WrapField<SinkRecord> xform = new WrapField.Key<>();
+    private final WrapField<SinkRecord> xform = new WrapField.Value<>();
 
     @After
     public void teardown() {
@@ -40,7 +40,7 @@ public class WrapFieldTest {
 
     @Test
     public void schemalessWithoutFields() {
-        xform.configure(Collections.singletonMap("wrapField", "magic"));
+        xform.configure(Collections.singletonMap("wrap-field", "magic"));
 
         final SinkRecord record = new SinkRecord("test", 0, null, 42, null, null, 0);
         final SinkRecord transformedRecord = xform.apply(record);
@@ -53,13 +53,13 @@ public class WrapFieldTest {
     public void schemalessWithFields() {
         final Map<String, Object> props = new HashMap<>();
 
-        props.put("wrapField", "wrapField");
+        props.put("wrap-field", "wrap-field");
         props.put("fields", "magic");
         xform.configure(props);
 
         final Map<String, Object> value = new HashMap<>();
 
-        value.put("magic", 42L);
+        value.put("magic", null);
         value.put("name", "magic");
 
         final SinkRecord record = new SinkRecord("test", 0, null, value, null, null,
@@ -67,13 +67,13 @@ public class WrapFieldTest {
         final SinkRecord transformedRecord = xform.apply(record);
 
         assertNull(transformedRecord.keySchema());
-        assertEquals(42L, ((Map) ((Map) transformedRecord.key()).get("wrapField")).get("magic"));
+        assertEquals(42L, ((Map) ((Map) transformedRecord.key()).get("wrap-field")).get("magic"));
         assertEquals("magic", ((Map) transformedRecord.key()).get("name"));
     }
 
     @Test
     public void withSchemaWithoutFields() {
-        xform.configure(Collections.singletonMap("wrapField", "magic"));
+        xform.configure(Collections.singletonMap("wrap-field", "magic"));
 
         final SinkRecord record = new SinkRecord("test", 0, Schema.INT32_SCHEMA, 42, null, null, 0);
         final SinkRecord transformedRecord = xform.apply(record);
@@ -87,7 +87,7 @@ public class WrapFieldTest {
     public void withSchemaWithFields() {
         final Map<String, Object> props = new HashMap<>();
 
-        props.put("wrapField", "wrapField");
+        props.put("wrap-field", "wrap-field");
         props.put("fields", "magic");
 
         xform.configure(props);
@@ -95,21 +95,23 @@ public class WrapFieldTest {
         final Schema simpleStructSchema = SchemaBuilder.struct().name("name").version(1).doc("doc")
                 .field("name", Schema.OPTIONAL_STRING_SCHEMA)
                 .field("magic", Schema.OPTIONAL_INT64_SCHEMA).build();
-        final Struct simpleStruct = new Struct(simpleStructSchema).put("magic", 42L).put("name", "magic");
+        final Struct simpleStruct = new Struct(simpleStructSchema)
+                .put("magic", 42L)
+                .put("name", "magic");
 
         final SinkRecord record = new SinkRecord("test", 0, simpleStructSchema, simpleStruct, null, null, 0);
         final SinkRecord transformedRecord = xform.apply(record);
 
         assertEquals(Schema.Type.STRUCT, transformedRecord.keySchema().type());
         assertEquals(record.keySchema(), transformedRecord.keySchema().field("magic").schema());
-        assertEquals(42L, ((Struct) ((Struct) transformedRecord.key()).get("wrapField")).get("magic"));
+        assertEquals(42L, ((Struct) ((Struct) transformedRecord.key()).get("wrap-field")).get("magic"));
     }
 
     @Test
     public void withSchemaWithFieldsAndMultipleFields() {
         final Map<String, Object> props = new HashMap<>();
 
-        props.put("wrapField", "wrapField");
+        props.put("wrap-field", "wrap-field");
         props.put("fields", "magic,name");
 
         xform.configure(props);
@@ -124,7 +126,7 @@ public class WrapFieldTest {
 
         assertEquals(Schema.Type.STRUCT, transformedRecord.keySchema().type());
         assertEquals(record.keySchema(), transformedRecord.keySchema().field("magic").schema());
-        assertEquals(42L, ((Struct) ((Struct) transformedRecord.key()).get("wrapField")).get("magic"));
+        assertEquals(42L, ((Struct) ((Struct) transformedRecord.key()).get("wrap-field")).get("magic"));
     }
 
 }

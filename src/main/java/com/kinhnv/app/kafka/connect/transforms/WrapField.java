@@ -4,7 +4,6 @@ import org.apache.kafka.common.cache.Cache;
 import org.apache.kafka.common.cache.LRUCache;
 import org.apache.kafka.common.cache.SynchronizedCache;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.protocol.types.Field.Str;
 import org.apache.kafka.connect.connector.ConnectRecord;
 import org.apache.kafka.connect.data.Field;
 import org.apache.kafka.connect.data.Schema;
@@ -23,26 +22,31 @@ import static org.apache.kafka.connect.transforms.util.Requirements.requireStruc
 
 public abstract class WrapField<R extends ConnectRecord<R>> implements Transformation<R> {
 
-    private static final String WRAP_FIELD_CONFIG = "wrapField";
+    private static final String WRAP_FIELD_CONFIG = "wrap-field";
     private static final String FIELDS_CONFIG = "fields";
+    private static final String ACTION_CONFIG = "action";
     private static final String PURPOSE = "wrapping field in record";
 
     public static final ConfigDef CONFIG_DEF = new ConfigDef()
             .define(WRAP_FIELD_CONFIG, ConfigDef.Type.STRING, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.MEDIUM,
                     "Field name for the single field that will be created in the resulting Struct or Map.")
-            .define(FIELDS_CONFIG, ConfigDef.Type.LIST, "", ConfigDef.Importance.MEDIUM,
+            .define(FIELDS_CONFIG, ConfigDef.Type.LIST, ConfigDef.NO_DEFAULT_VALUE, ConfigDef.Importance.MEDIUM,
+                    "Field name for the single field that will be created in the resulting Struct or Map.")
+            .define(ACTION_CONFIG, ConfigDef.Type.STRING, "move", ConfigDef.Importance.MEDIUM,
                     "Field name for the single field that will be created in the resulting Struct or Map.");
 
     private Cache<Schema, Schema> schemaUpdateCache;
 
     private String wrapFieldName;
     private List<String> fieldNames;
+    private String action;
 
     @Override
     public void configure(Map<String, ?> props) {
         final SimpleConfig config = new SimpleConfig(CONFIG_DEF, props);
         wrapFieldName = config.getString(WRAP_FIELD_CONFIG);
         fieldNames = config.getList(FIELDS_CONFIG);
+        action = config.getString(ACTION_CONFIG);
         schemaUpdateCache = new SynchronizedCache<>(new LRUCache<Schema, Schema>(16));
     }
 
@@ -70,11 +74,14 @@ public abstract class WrapField<R extends ConnectRecord<R>> implements Transform
                 if (!fieldNames.contains(entity.getKey())) {
                     updatedValue.put(entity.getKey(), entity.getValue());
                 } else {
+                    if (action == "copy") {
+                        updatedValue.put(entity.getKey(), entity.getValue());
+                    }
                     wrapValue.put(entity.getKey(), entity.getValue());
                 }
             }
             if (wrapValue.size() > 0) {
-                updatedValue.put(wrapFieldName, value);
+                updatedValue.put(wrapFieldName, wrapValue);
             }
         }
         return newRecord(record, null, updatedValue);
@@ -97,26 +104,32 @@ public abstract class WrapField<R extends ConnectRecord<R>> implements Transform
             Struct wrapSchemaValue = null;
             boolean hasWrap = false;
             final Struct value = requireStruct(operatingValue(record), PURPOSE);
-            if (updatedSchema == null) {
-                final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
-                final SchemaBuilder wrapSchemaBuilder = SchemaBuilder.struct();
-                for (Field field : schema.fields()) {
-                    if (!fieldNames.contains(field.name())) {
+
+            final SchemaBuilder builder = SchemaUtil.copySchemaBasics(schema, SchemaBuilder.struct());
+            final SchemaBuilder wrapSchemaBuilder = SchemaBuilder.struct();
+            for (Field field : schema.fields()) {
+                if (!fieldNames.contains(field.name())) {
+                    builder.field(field.name(), field.schema());
+                } else {
+                    if (action == "copy") {
                         builder.field(field.name(), field.schema());
-                    } else {
-                        wrapSchemaBuilder.field(field.name(), field.schema());
                     }
+                    wrapSchemaBuilder.field(field.name(), field.schema());
                 }
-                final Schema wrapSchema = wrapSchemaBuilder.build();
-                wrapSchemaValue = new Struct(wrapSchema);
-                updatedSchema = builder.field(wrapFieldName, wrapSchema).build();
-                schemaUpdateCache.put(schema, updatedSchema);
             }
+            final Schema wrapSchema = wrapSchemaBuilder.build();
+            wrapSchemaValue = new Struct(wrapSchema);
+            updatedSchema = builder.field(wrapFieldName, wrapSchema).build();
+            schemaUpdateCache.put(schema, updatedSchema);
+
             updatedValue = new Struct(updatedSchema);
             for (Field field : value.schema().fields()) {
                 if (!fieldNames.contains(field.name())) {
                     updatedValue.put(field.name(), value.get(field));
                 } else {
+                    if (action == "copy") {
+                        updatedValue.put(field.name(), value.get(field));
+                    }
                     hasWrap = true;
                     wrapSchemaValue.put(field.name(), value.get(field));
                 }
